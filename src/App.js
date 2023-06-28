@@ -1,75 +1,56 @@
-import React, { Component, useRef } from "react";
-import { loremIpsum } from "lorem-ipsum";
-import {
-  List,
-  AutoSizer,
-  CellMeasurer,
-  CellMeasurerCache,
-} from "react-virtualized";
-
-const list = Array(400)
-  .fill()
-  .map((val, idx) => {
-    return {
-      id: idx,
-      name: "John Doe",
-      image: "http://via.placeholder.com/40",
-      text: loremIpsum({
-        count: 1,
-        units: "sentences",
-        sentenceLowerBound: 4,
-        sentenceUpperBound: 8,
-      }),
-    };
-  });
-
-function renderRow({ index, key, style, parent }, cache) {
-  return (
-    <CellMeasurer
-      key={key}
-      cache={cache.current}
-      parent={parent}
-      columnIndex={0}
-      rowIndex={index}
-    >
-      <div key={key} style={style} className="row">
-        <div className="image">
-          <img src={list[index].image} alt="" />
-        </div>
-        <div className="content">
-          <div>{list[index].name}</div>
-          <div>{list[index].text}</div>
-        </div>
-      </div>
-    </CellMeasurer>
-  );
-}
+import { useState, useCallback, useRef } from "react";
+import "./index.css";
+import InfiniteScroll from "./InfiniteScroll";
 
 function App() {
-  const cache = useRef(
-    new CellMeasurerCache({
-      fixedWidth: true,
-      defaultHeight: 100,
-    })
-  );
+  const [query, setQuery] = useState("");
+  const [data, setData] = useState([]);
 
-  return (
-    <div className="App">
-      <div className="list">
-        <AutoSizer>
-          {({ width, height }) => (
-            <List
-              width={width}
-              height={height}
-              rowHeight={cache.current.rowHeight}
-              deferredMeasurementCache={cache.current}
-              rowRenderer={(e) => renderRow(e, cache)}
-              rowCount={list.length}
-            />
-          )}
-        </AutoSizer>
-      </div>
+  const controllerRef = useRef(null);
+
+  const handleInput = useCallback((e) => {
+    setQuery(e.target.value);
+  }, []);
+
+  const renderItem = useCallback(({ title }, key, ref) => (
+    <div ref={ref} key={key}>
+      {title}
     </div>
+  ));
+
+  const getData = useCallback((query, pageNumber) => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (controllerRef.current) controllerRef.current.abort();
+        controllerRef.current = new AbortController();
+
+        const promise = await fetch(
+          "https://openlibrary.org/search.json?" +
+            new URLSearchParams({
+              q: query,
+              page: pageNumber,
+            }),
+          { signal: controllerRef.current.signal }
+        );
+        const data = await promise.json();
+        resolve();
+        setData((prevData) => [...prevData, ...data.docs]);
+      } catch (e) {
+        reject();
+      }
+    });
+  }, []);
+  return (
+    <>
+      <input type="text" value={query} onChange={handleInput} />
+
+      <InfiniteScroll
+        renderListItem={renderItem}
+        getData={getData}
+        listData={data}
+        query={query}
+      />
+    </>
   );
 }
 
